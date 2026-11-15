@@ -31,6 +31,13 @@ const SECURITY_HEADERS = [
 const nextConfig: NextConfig = {
   // standalone build for a lean docker image.
   output: 'standalone',
+  // Client cache of the RSC payloads. Dynamic route segments default to 0s, so
+  // every revisit of a view (Back included) refetches the whole segment; keeping
+  // them for a short while makes returning to a view immediate. Data freshness is
+  // unaffected: the views keep their own query cache and the sync revision poll.
+  experimental: {
+    staleTimes: { dynamic: 15, static: 300 },
+  },
   poweredByHeader: false,
   // No page may be framed, except the public ones (/share, /p) on the sites the instance
   // owner trusts: src/proxy.ts decides those per request.

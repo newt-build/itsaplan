@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useShellRoute } from '@/hooks/useShellRoute';
 import { useTranslations } from 'next-intl';
@@ -12,10 +13,12 @@ import {
 } from 'lucide-react';
 import {
   cyclesPath,
+  cyclesViewPath,
   dashboardsPath,
   documentsPath,
   inboxPath,
   initiativesPath,
+  initiativesTabPath,
   notesPath,
   projectPath,
   viewPath,
@@ -24,6 +27,10 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useProjectFeatures } from '@/hooks/useProjectFeatures';
 import { useInboxUnread } from '@/hooks/useInboxUnread';
 import { useViewsQuery } from '@/services/views.service';
+import { useInitiativeCountsQuery } from '@/services/initiatives.service';
+import { readCyclesView } from '@/features/cycles/utils/cyclesView';
+import { readInitiativeTabOrder } from '@/features/initiatives/hooks/useInitiativeTabOrder';
+import { tabCount } from '@/features/initiatives/utils/tabs';
 import { viewIcon } from '@/utils/viewIcons';
 import { SidebarGroup, SidebarGroupContent, SidebarMenu } from '@/components/ui/sidebar';
 import SidebarNavItem from '@/components/layout/SidebarNavItem';
@@ -47,6 +54,28 @@ export default function SidebarWorkNav({
   const { data: inboxUnread } = useInboxUnread(projectKey, projectId);
   const { data: views } = useViewsQuery(projectKey);
   const favorites = views?.filter((v) => v.favorite) ?? [];
+
+  // The remembered cycles layout and the initiatives tab order live in
+  // localStorage, which the server render cannot read. Resolving the target after
+  // mount lets the sidebar link straight at the page it opens, so a click no longer
+  // pays the extra client redirect at /cycles or /initiatives (one RSC round trip).
+  // Until then the links point at the list paths, exactly as before.
+  const { data: initiativeCounts } = useInitiativeCountsQuery(projectKey);
+  const [cyclesHref, setCyclesHref] = useState<string | null>(null);
+  const [initiativesHref, setInitiativesHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!projectKey) {
+      setCyclesHref(null);
+      setInitiativesHref(null);
+      return;
+    }
+    setCyclesHref(cyclesViewPath(projectKey, readCyclesView(projectKey)));
+    const tab = initiativeCounts
+      ? (readInitiativeTabOrder().find((t) => (tabCount(initiativeCounts, t) ?? 0) > 0) ?? 'all')
+      : null;
+    setInitiativesHref(tab ? initiativesTabPath(projectKey, tab) : null);
+  }, [projectKey, initiativeCounts]);
 
   // "Work items" is the default view: active on the project root and any segment
   // that is not one of the other top-level destinations.
@@ -118,7 +147,7 @@ export default function SidebarWorkNav({
           )}
           {features.initiatives && can('initiatives', 'read') && (
             <SidebarNavItem
-              href={projectKey ? initiativesPath(projectKey) : '#'}
+              href={projectKey ? (initiativesHref ?? initiativesPath(projectKey)) : '#'}
               icon={Target}
               label={t('initiatives')}
               active={pathname.includes('/initiatives')}
@@ -127,7 +156,7 @@ export default function SidebarWorkNav({
           )}
           {features.cycles && can('cycles', 'read') && (
             <SidebarNavItem
-              href={projectKey ? cyclesPath(projectKey) : '#'}
+              href={projectKey ? (cyclesHref ?? cyclesPath(projectKey)) : '#'}
               icon={RefreshCw}
               label={t('cycles')}
               active={pathname.includes('/cycles')}
